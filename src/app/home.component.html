@@ -1,0 +1,126 @@
+<header class="nav">
+  <button class="brand" (click)="scrollTo('top')" aria-label="Cheezy Mood home">
+    <img src="assets/logo.png" alt="Cheezy Mood">
+  </button>
+  <nav [class.open]="mobileMenu">
+    <button (click)="scrollTo('menu')">Menu</button>
+    <button (click)="scrollTo('how')">How it works</button>
+    <button class="nav-order" (click)="scrollTo('order')">Order now</button>
+  </nav>
+  <button class="cart-button" (click)="showCart = true" [attr.aria-label]="cartCount ? 'Open cart with ' + cartCount + ' item' + (cartCount === 1 ? '' : 's') : 'Open empty cart'">
+    <span>🛒</span><b>{{ cartCount }}</b>
+  </button>
+  <button class="hamburger" (click)="mobileMenu = !mobileMenu" [attr.aria-expanded]="mobileMenu" aria-label="Toggle navigation">☰</button>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">ALL ABOUT JUNKY FOOD</div>
+      <h1>GET YOUR<br><span>CHEEZY MOOD.</span></h1>
+      <p>Build it. Load it. Go crazy. Preorder your food and pick it up exactly when you want.</p>
+      <div class="hero-actions">
+        <button class="primary" (click)="scrollTo('order')">START YOUR ORDER <span>→</span></button>
+        <button class="ghost" (click)="scrollTo('menu')">SEE THE MENU</button>
+      </div>
+    </div>
+    <div class="hero-logo-wrap">
+      <div class="blob blob-a"></div><div class="blob blob-b"></div>
+      <img src="assets/logo.png" class="hero-logo" alt="Cheezy Mood logo">
+    </div>
+  </section>
+
+  <section class="marquee"><span>CHEEZY</span><i>✦</i><span>MOOD</span><i>✦</i><span>LOADED</span><i>✦</i><span>JUNKY</span><i>✦</i><span>FOOD</span></section>
+
+  <section class="menu-section" id="menu">
+    <div class="section-heading"><div><span class="eyebrow">WHAT'S ON</span><h2>THE MENU</h2></div><p>Start with the base.<br>Then make it crazy.</p></div>
+    <div class="menu-grid">
+      <article class="menu-card featured">
+        <div class="tag">BASE</div><h3>SANDWICH</h3><strong>3.5 <small>DT</small></strong>
+        <p>Our loaded base comes with sauce, egg & cheese sauce.</p><div class="card-line"></div><span>THEN LOAD IT ↑</span>
+      </article>
+      <article class="menu-card">
+        <div class="tag">BASE</div><h3>PASTA</h3><strong>5 <small>DT</small></strong>
+        <p>Mac & Cheese, Alfredo or Rossa. Pick your mood.</p><div class="pasta-list"><b>MAC & CHEESE</b><b>ALFREDO</b><b>ROSSA</b></div>
+      </article>
+      <article class="menu-card dark">
+        <div class="tag">LOAD IT</div><h3>MEAT</h3><div class="price-list"><span *ngFor="let item of meats"><b>{{ item.name }}</b><strong>{{ formatPrice(item.price) }}</strong></span></div>
+      </article>
+      <article class="menu-card dark">
+        <div class="tag">GO CRAZY</div><h3>CHEESE</h3><div class="price-list"><span *ngFor="let item of cheeses"><b>{{ item.name }}</b><strong>{{ formatPrice(item.price) }}</strong></span></div>
+      </article>
+      <article class="menu-card fries-card"><div class="tag">EXTRA</div><h3>FRIES</h3><strong>2 <small>DT</small></strong><p>Because there is no such thing as too much.</p></article>
+    </div>
+    <div class="menu-image"><img src="assets/menu.jpg" alt="Cheezy Mood original menu"></div>
+  </section>
+
+  <section class="order-section" id="order">
+    <div class="section-heading"><div><span class="eyebrow">BUILD YOURS</span><h2>MAKE IT LOADED.</h2></div><p>Your order is prepared for your chosen pickup time.</p></div>
+    <div class="builder">
+      <div class="builder-main">
+        <div class="step"><span>01</span><div><h3>Choose your base</h3><p>Every bite starts here.</p></div></div>
+        <div class="choice-row">
+          <button [class.active]="selectedBase === 'Sandwich'" (click)="selectedBase='Sandwich'">SANDWICH <b>3.5 DT</b></button>
+          <button [class.active]="selectedBase === 'Pasta'" (click)="selectedBase='Pasta'">PASTA <b>5 DT</b></button>
+        </div>
+        <div *ngIf="selectedBase === 'Pasta'" class="subchoice">
+          <label *ngFor="let pasta of pastas"><input type="radio" name="pasta" [(ngModel)]="selectedPasta" [value]="pasta.name"><span><b>{{ pasta.name }}</b><small>{{ pasta.description }}</small></span></label>
+        </div>
+
+        <div class="step"><span>02</span><div><h3>Load it</h3><p>Pick as many extras as you want.</p></div></div>
+        <div class="extra-grid">
+          <button *ngFor="let item of meats" [class.selected]="isSelected(selectedMeats,item.name)" (click)="toggle(selectedMeats,item.name)"><span>{{ item.name }}</span><b>+{{ formatPrice(item.price) }}</b></button>
+        </div>
+
+        <div class="step"><span>03</span><div><h3>Go crazy</h3><p>More cheese. More happiness.</p></div></div>
+        <div class="extra-grid">
+          <button *ngFor="let item of cheeses" [class.selected]="isSelected(selectedCheeses,item.name)" (click)="toggle(selectedCheeses,item.name)"><span>{{ item.name }}</span><b>+{{ formatPrice(item.price) }}</b></button>
+        </div>
+
+        <div class="fries-toggle"><label><input type="checkbox" [(ngModel)]="addFries"><span class="fake-check">✓</span><b>Add fries</b></label><strong>+2 DT</strong></div>
+        <div class="quantity"><span>QUANTITY</span><div><button (click)="quantity = Math.max(1, quantity - 1)">−</button><b>{{ quantity }}</b><button (click)="quantity = quantity + 1">+</button></div></div>
+        <button class="add-button" (click)="addToCart()">ADD TO ORDER <span>{{ formatPrice(currentTotal) }} →</span></button>
+      </div>
+      <aside class="order-summary">
+        <div class="summary-top"><span>YOUR MOOD</span><span>{{ cartCount }} ITEM{{ cartCount === 1 ? '' : 'S' }}</span></div>
+        <div *ngIf="!cart.length" class="empty"><img src="assets/logo.png" alt=""><p>Your order is waiting to get crazy.</p><button (click)="selectedBase='Sandwich'">START WITH A SANDWICH</button></div>
+        <div *ngFor="let item of cart" class="summary-item"><div><b>{{ item.name }}</b><small *ngIf="item.extras.length">{{ item.extras.join(' · ') }}</small></div><div class="summary-controls"><button (click)="changeQty(item,-1)">−</button><span>{{ item.quantity }}</span><button (click)="changeQty(item,1)">+</button></div><strong>{{ formatPrice(item.price * item.quantity) }}</strong></div>
+        <div *ngIf="cart.length" class="total"><span>TOTAL</span><b>{{ formatPrice(cartTotal) }}</b></div>
+        <button *ngIf="cart.length" class="checkout" (click)="openCheckout()">CHOOSE PICKUP TIME →</button>
+      </aside>
+    </div>
+  </section>
+
+  <section class="how-section" id="how">
+    <span class="eyebrow">NO WAITING. NO STRESS.</span><h2>ORDER. PICK UP. <span>DESTROY.</span></h2>
+    <div class="how-grid"><div><b>01</b><h3>BUILD</h3><p>Choose your base and load it with meat and cheese.</p></div><div><b>02</b><h3>PREORDER</h3><p>Tell us your name, phone and the pickup time you want.</p></div><div><b>03</b><h3>PICK UP</h3><p>We prepare it for your time. Walk in. Grab it. Go crazy.</p></div></div>
+  </section>
+
+  <section class="cta-section"><img src="assets/logo.png" alt="Cheezy Mood"><div><span class="eyebrow">READY?</span><h2>FEED THE MOOD.</h2></div><button (click)="scrollTo('order')">ORDER NOW →</button></section>
+</main>
+
+<footer><img src="assets/logo.png" alt="Cheezy Mood"><p>ALL ABOUT JUNKY FOOD</p><span>© 2026 CHEEZY MOOD</span></footer>
+
+<div class="overlay" *ngIf="showCart || showCheckout" (click)="showCart=false; showCheckout=false"></div>
+<aside class="drawer" [class.open]="showCart || showCheckout">
+  <button class="close" (click)="showCart=false; showCheckout=false">×</button>
+  <ng-container *ngIf="!showCheckout; else checkout">
+    <span class="eyebrow">YOUR ORDER</span><h2>CHEEZY CART.</h2>
+    <div *ngIf="!cart.length" class="drawer-empty">Nothing here yet.<br>Let's fix that 😎</div>
+    <div *ngFor="let item of cart" class="drawer-item"><div><b>{{ item.name }}</b><small *ngIf="item.extras.length">{{ item.extras.join(' · ') }}</small><strong>{{ formatPrice(item.price * item.quantity) }}</strong></div><div><button (click)="changeQty(item,-1)">−</button><span>{{ item.quantity }}</span><button (click)="changeQty(item,1)">+</button></div></div>
+    <div *ngIf="cart.length" class="drawer-total"><span>TOTAL</span><b>{{ formatPrice(cartTotal) }}</b></div>
+    <button *ngIf="cart.length" class="checkout" (click)="openCheckout()">PICKUP DETAILS →</button>
+  </ng-container>
+  <ng-template #checkout>
+    <span class="eyebrow">FINAL STEP</span><h2>WHEN ARE<br>YOU PICKING UP?</h2>
+    <div class="form-grid"><label>Name<input [(ngModel)]="customerName" autocomplete="name" maxlength="60" placeholder="Your name" aria-label="Your name"></label><label>Phone<input [(ngModel)]="customerPhone" autocomplete="tel" inputmode="tel" maxlength="20" pattern="[0-9+ ()-]{8,20}" placeholder="+216 ..." aria-label="Phone number"></label></div>
+    <label>Pickup day<select [(ngModel)]="pickupDate" (ngModelChange)="onPickupDateChange()"><option value="today">Today</option><option value="tomorrow">Tomorrow</option></select></label>
+    <label>Pickup time<select [(ngModel)]="pickupTime" [disabled]="!timeSlots.length"><option *ngFor="let slot of timeSlots" [value]="slot">{{ slot }}</option></select><small class="field-hint" *ngIf="pickupDate === 'today'">Today starts from the next available slot.</small><small class="field-hint" *ngIf="!timeSlots.length">No pickup slots remain today — choose tomorrow.</small></label>
+    <label>Note <span class="optional">optional</span><textarea [(ngModel)]="customerNote" rows="3" placeholder="Anything we should know?"></textarea></label>
+    <div class="final-total"><span>ORDER TOTAL</span><b>{{ formatPrice(cartTotal) }}</b></div>
+    <button class="checkout" [disabled]="!customerName.trim() || !customerPhone.trim() || !pickupTime" (click)="sendOrder()">SEND PREORDER ON WHATSAPP →</button>
+    <button class="back" (click)="backToCart()">← Back to cart</button>
+    <p class="whatsapp-note">Your order will open in WhatsApp as a ready-to-send message. Make sure you send it to confirm your preorder.</p>
+    <div class="sent" *ngIf="orderSent">✓ WhatsApp opened. Send the message to finish your preorder.</div>
+  </ng-template>
+</aside>

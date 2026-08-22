@@ -1,0 +1,9 @@
+{
+  "name": "Cheezy Mood — All About Junky Food",
+  "short_name": "Cheezy Mood",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#ffc629",
+  "icons": [{"src":"assets/logo.png","sizes":"1254x1254","type":"image/png","purpose":"any maskable"}]
+}
