@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { OrderService } from './services/order.service';
 
 interface MenuItem { name: string; price: number; description?: string; }
 interface CartItem { id: number; name: string; base: string; price: number; extras: string[]; quantity: number; }
@@ -12,6 +13,7 @@ interface CartItem { id: number; name: string; base: string; price: number; extr
   templateUrl: './home.component.html'
 })
 export class HomeComponent implements OnInit {
+  constructor(private orderService: OrderService){}
   // CHANGE THIS to Cheezy Mood's WhatsApp number, digits only, including Tunisia country code.
   readonly whatsappNumber = '21624578212';
 
@@ -39,7 +41,7 @@ export class HomeComponent implements OnInit {
   pastas: MenuItem[] = [
     { name: 'Mac & Cheese', price: 0, description: 'Macaroni, cheese sauce & fried onion' },
     { name: 'Alfredo', price: 0, description: 'Penne or spaghetti, cream sauce' },
-    { name: 'Rossa', price: 0, description: 'Penne or spaghetti, cream sauce & tomato sauce' }
+    { name: 'Rosa', price: 0, description: 'Penne or spaghetti, cream sauce & tomato sauce' }
   ];
 
   selectedBase = 'Sandwich';
@@ -157,28 +159,127 @@ export class HomeComponent implements OnInit {
 
   backToCart(): void { this.showCheckout = false; this.showCart = true; }
 
-  sendOrder(): void {
-    if (!this.customerName.trim() || !this.customerPhone.trim() || !this.pickupTime) return;
-    const dateLabel = this.pickupDate === 'today' ? 'Today' : 'Tomorrow';
-    const lines = this.cart.map(item => {
-      const extras = item.extras.length ? ` + ${item.extras.join(', ')}` : '';
-      return `• ${item.quantity}x ${item.name}${extras} — ${(item.price * item.quantity).toFixed(2)} DT`;
-    });
-    const message = [
-      '🔥 CHEEZY MOOD — NEW PREORDER', '',
-      `Name: ${this.customerName.trim()}`,
-      `Phone: ${this.customerPhone.trim()}`,
-      `Pickup: ${dateLabel} at ${this.pickupTime}`, '',
-      'ORDER:', ...lines, '',
-      `TOTAL: ${this.cartTotal.toFixed(2)} DT`,
-      this.customerNote.trim() ? `Note: ${this.customerNote.trim()}` : '', '',
-      'All About Junky Food 😎'
-    ].filter(Boolean).join('\n');
-
-    const url = `https://wa.me/${this.whatsappNumber}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    this.orderSent = true;
+sendOrder(): void {
+  if (
+    !this.customerName.trim() ||
+    !this.customerPhone.trim() ||
+    !this.pickupTime ||
+    !this.cart.length
+  ) {
+    return;
   }
+
+  this.orderSent = false;
+
+  const order = {
+    customer: {
+      name: this.customerName.trim(),
+      phone: this.customerPhone.trim()
+    },
+
+    items: this.cart.map(item => ({
+      name: item.name,
+      base: item.base,
+      quantity: item.quantity,
+      unitPrice: Number(item.price.toFixed(2)),
+      totalPrice: Number((item.price * item.quantity).toFixed(2)),
+      extras: item.extras
+    })),
+
+    pickupDate: this.getPickupDate(),
+
+    pickupTime: this.pickupTime,
+
+    note: this.customerNote.trim(),
+
+    total: Number(this.cartTotal.toFixed(2))
+  };
+
+  console.log('Sending order to backend:', order);
+
+  this.orderService.createOrder(order).subscribe({
+
+    next: (response) => {
+
+      console.log('Order created successfully:', response);
+
+      const orderNumber =
+        response.orderNumber || 'CHEEZY-MOOD';
+
+      const invoiceNumber =
+        response.invoiceNumber || '';
+
+      const confirmedPickupTime =
+        response.pickupAt
+          ? new Date(response.pickupAt).toLocaleTimeString(
+              'en-TN',
+              {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+              }
+            )
+          : this.pickupTime;
+
+      const confirmedTotal =
+        response.total ?? this.cartTotal;
+
+      this.openWhatsApp(
+        orderNumber,
+        invoiceNumber,
+        confirmedPickupTime,
+        confirmedTotal
+      );
+
+      this.orderSent = true;
+    },
+
+    error: (error) => {
+
+      console.error('Order creation failed:', error);
+
+      /*
+       * 409 means the requested pickup time is full.
+       */
+      if (
+        error.status === 409 &&
+        error.error?.code === 'PICKUP_SLOT_UNAVAILABLE'
+      ) {
+
+        const suggested = error.error.suggestedSlot;
+
+        if (suggested) {
+
+          alert(
+            `This pickup time is full.\n\n` +
+            `Next available pickup: ${suggested.time}`
+          );
+
+          this.pickupDate =
+            suggested.date === this.getPickupDate()
+              ? 'today'
+              : 'tomorrow';
+
+          this.pickupTime = suggested.time;
+
+        } else {
+
+          alert(
+            'This pickup time is full and there are no more available slots.'
+          );
+        }
+
+        return;
+      }
+
+      alert(
+        'Sorry, we could not send your preorder. ' +
+        'Please check your connection and try again.'
+      );
+    }
+
+  });
+}
 
   scrollTo(id: string): void {
     this.mobileMenu = false;
@@ -186,4 +287,69 @@ export class HomeComponent implements OnInit {
   }
 
   formatPrice(value: number): string { return `${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)} DT`; }
+
+  private getPickupDate(): string {
+  const date = new Date();
+
+  if (this.pickupDate === 'tomorrow') {
+    date.setDate(date.getDate() + 1);
+  }
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-');
 }
+
+private openWhatsApp(
+  orderNumber: string,
+  invoiceNumber: string,
+  pickupTime: string,
+  total: number
+): void {
+
+  const dateLabel =
+    this.pickupDate === 'today'
+      ? 'Today'
+      : 'Tomorrow';
+
+  const lines = this.cart.map(item => {
+
+    const extras = item.extras.length
+      ? ` + ${item.extras.join(', ')}`
+      : '';
+
+    return `• ${item.quantity}x ${item.name}${extras} — ${(item.price * item.quantity).toFixed(2)} DT`;
+  });
+
+  const message = [
+    '🔥 CHEEZY MOOD — NEW PREORDER',
+    '',
+    `Order: ${orderNumber}`,
+    invoiceNumber ? `Invoice: ${invoiceNumber}` : '',
+    '',
+    `Name: ${this.customerName.trim()}`,
+    `Phone: ${this.customerPhone.trim()}`,
+    `Pickup: ${dateLabel} at ${pickupTime}`,
+    '',
+    'ORDER:',
+    ...lines,
+    '',
+    `TOTAL: ${Number(total).toFixed(2)} DT`,
+    this.customerNote.trim()
+      ? `Note: ${this.customerNote.trim()}`
+      : '',
+    '',
+    'All About Junky Food 😎'
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const url =
+    `https://wa.me/${this.whatsappNumber}?text=${encodeURIComponent(message)}`;
+
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+}
+
