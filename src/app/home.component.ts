@@ -160,14 +160,34 @@ export class HomeComponent implements OnInit {
   backToCart(): void { this.showCheckout = false; this.showCart = true; }
 
 sendOrder(): void {
+  // if (
+  //   !this.customerName.trim() ||
+  //   !this.customerPhone.trim() ||
+  //   !this.pickupTime ||
+  //   !this.cart.length
+  // ) {
+  //   return;
+  // }
+    console.log('SEND ORDER CLICKED');
+
+  console.log({
+    customerName: this.customerName,
+    customerPhone: this.customerPhone,
+    pickupTime: this.pickupTime,
+    cartLength: this.cart.length
+  });
+
   if (
     !this.customerName.trim() ||
     !this.customerPhone.trim() ||
     !this.pickupTime ||
     !this.cart.length
   ) {
+    console.log('ORDER BLOCKED BY VALIDATION');
     return;
   }
+
+  console.log('VALIDATION PASSED');
 
   this.orderSent = false;
 
