@@ -14,6 +14,16 @@
 </header>
 
 <main id="top">
+  <section class="store-status" *ngIf="!loadingStore && !orderingEnabled">
+    <strong>ORDERING CLOSED</strong>
+    <span>{{ storeStatus?.message || 'We are not accepting online orders right now.' }}</span>
+    <small *ngIf="storeStatus?.openingTime && storeStatus?.closingTime">Hours: {{ storeStatus?.openingTime }} → {{ storeStatus?.closingTime }}</small>
+  </section>
+  <section class="store-status warning" *ngIf="!loadingStore && orderingEnabled && storeStatus?.reason === 'CLOSING_SOON'">
+    <strong>CLOSING SOON</strong>
+    <span>{{ storeStatus?.message || 'Please place your order soon.' }}</span>
+    <small>{{ storeStatus?.minutesToClose }} min remaining</small>
+  </section>
   <section class="hero">
     <div class="hero-copy">
       <div class="eyebrow">ALL ABOUT JUNKY FOOD</div>
@@ -60,8 +70,8 @@
       <div class="builder-main">
         <div class="step"><span>01</span><div><h3>Choose your base</h3><p>Every bite starts here.</p></div></div>
         <div class="choice-row">
-          <button [class.active]="selectedBase === 'Sandwich'" (click)="selectedBase='Sandwich'">SANDWICH <b>3.5 DT</b></button>
-          <button [class.active]="selectedBase === 'Pasta'" (click)="selectedBase='Pasta'">PASTA <b>5 DT</b></button>
+          <button [disabled]="!orderingEnabled || !isAvailable('Sandwich')" [class.active]="selectedBase === 'Sandwich'" (click)="selectedBase='Sandwich'">SANDWICH <b>3.5 DT</b></button>
+          <button [disabled]="!orderingEnabled || !isAvailable('Pasta')" [class.active]="selectedBase === 'Pasta'" (click)="selectedBase='Pasta'">PASTA <b>5 DT</b></button>
         </div>
         <div *ngIf="selectedBase === 'Pasta'" class="subchoice">
           <label *ngFor="let pasta of pastas"><input type="radio" name="pasta" [(ngModel)]="selectedPasta" [value]="pasta.name"><span><b>{{ pasta.name }}</b><small>{{ pasta.description }}</small></span></label>
@@ -69,17 +79,17 @@
 
         <div class="step"><span>02</span><div><h3>Load it</h3><p>Pick as many extras as you want.</p></div></div>
         <div class="extra-grid">
-          <button *ngFor="let item of meats" [class.selected]="isSelected(selectedMeats,item.name)" (click)="toggle(selectedMeats,item.name)"><span>{{ item.name }}</span><b>+{{ formatPrice(item.price) }}</b></button>
+          <button *ngFor="let item of meats" [disabled]="!orderingEnabled || !isAvailable(item.name)" [class.selected]="isSelected(selectedMeats,item.name)" (click)="toggle(selectedMeats,item.name)"><span>{{ item.name }}</span><b>{{ isAvailable(item.name) ? '+' + formatPrice(item.price) : availabilityLabel(item.name) }}</b></button>
         </div>
 
         <div class="step"><span>03</span><div><h3>Go crazy</h3><p>More cheese. More happiness.</p></div></div>
         <div class="extra-grid">
-          <button *ngFor="let item of cheeses" [class.selected]="isSelected(selectedCheeses,item.name)" (click)="toggle(selectedCheeses,item.name)"><span>{{ item.name }}</span><b>+{{ formatPrice(item.price) }}</b></button>
+          <button *ngFor="let item of cheeses" [disabled]="!orderingEnabled || !isAvailable(item.name)" [class.selected]="isSelected(selectedCheeses,item.name)" (click)="toggle(selectedCheeses,item.name)"><span>{{ item.name }}</span><b>{{ isAvailable(item.name) ? '+' + formatPrice(item.price) : availabilityLabel(item.name) }}</b></button>
         </div>
 
-        <div class="fries-toggle"><label><input type="checkbox" [(ngModel)]="addFries"><span class="fake-check">✓</span><b>Add fries</b></label><strong>+2 DT</strong></div>
+        <div class="fries-toggle"><label><input type="checkbox" [(ngModel)]="addFries" [disabled]="!orderingEnabled || !isAvailable('Fries')"><span class="fake-check">✓</span><b>Add fries</b></label><strong>{{ isAvailable('Fries') ? ' +2 DT' : availabilityLabel('Fries') }}</strong></div>
         <div class="quantity"><span>QUANTITY</span><div><button (click)="quantity = Math.max(1, quantity - 1)">−</button><b>{{ quantity }}</b><button (click)="quantity = quantity + 1">+</button></div></div>
-        <button class="add-button" (click)="addToCart()">ADD TO ORDER <span>{{ formatPrice(currentTotal) }} →</span></button>
+        <button class="add-button" [disabled]="!orderingEnabled" (click)="addToCart()">{{ orderingEnabled ? 'ADD TO ORDER' : 'ORDERING CLOSED' }} <span>{{ orderingEnabled ? formatPrice(currentTotal) + ' →' : '' }}</span></button>
       </div>
       <aside class="order-summary">
         <div class="summary-top"><span>YOUR MOOD</span><span>{{ cartCount }} ITEM{{ cartCount === 1 ? '' : 'S' }}</span></div>
@@ -118,7 +128,7 @@
     <label>Pickup time<select [(ngModel)]="pickupTime" [disabled]="!timeSlots.length"><option *ngFor="let slot of timeSlots" [value]="slot">{{ slot }}</option></select><small class="field-hint" *ngIf="pickupDate === 'today'">Today starts from the next available slot.</small><small class="field-hint" *ngIf="!timeSlots.length">No pickup slots remain today — choose tomorrow.</small></label>
     <label>Note <span class="optional">optional</span><textarea [(ngModel)]="customerNote" rows="3" placeholder="Anything we should know?"></textarea></label>
     <div class="final-total"><span>ORDER TOTAL</span><b>{{ formatPrice(cartTotal) }}</b></div>
-    <button class="checkout" [disabled]="!customerName.trim() || !customerPhone.trim() || !pickupTime" (click)="sendOrder()">SEND PREORDER ON WHATSAPP →</button>
+    <button class="checkout" [disabled]="!orderingEnabled || sendingOrder || !customerName.trim() || !customerPhone.trim() || !pickupTime" (click)="sendOrder()">{{ sendingOrder ? 'SENDING…' : (orderingEnabled ? 'SEND PREORDER ON WHATSAPP →' : 'ORDERING CLOSED') }}</button>
     <button class="back" (click)="backToCart()">← Back to cart</button>
     <p class="whatsapp-note">Your order will open in WhatsApp as a ready-to-send message. Make sure you send it to confirm your preorder.</p>
     <div class="sent" *ngIf="orderSent">✓ WhatsApp opened. Send the message to finish your preorder.</div>

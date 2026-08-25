@@ -1,10 +1,11 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Subscription, timer } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { OrderService } from './services/order.service';
+import { OrderService, ArticleAvailability, StoreStatus } from './services/order.service';
 
 interface MenuItem { name: string; price: number; description?: string; }
-interface CartItem { id: number; name: string; base: string; price: number; extras: string[]; quantity: number; }
+interface CartItem { id: number; name: string; base: string; price: number; extras: string[]; quantity: number; articleId?: string; department?: 'sandwich' | 'pasta' | 'fries' | 'general'; preparationMinutes?: number; stockRequirements: { articleId: string; quantity: number }[]; }
 
 @Component({
   standalone: true,
@@ -12,7 +13,7 @@ interface CartItem { id: number; name: string; base: string; price: number; extr
   imports: [CommonModule, FormsModule],
   templateUrl: './home.component.html'
 })
-export class HomeComponent implements OnInit {
+export class HomeComponent implements OnInit, OnDestroy {
   constructor(private orderService: OrderService){}
   // CHANGE THIS to Cheezy Mood's WhatsApp number, digits only, including Tunisia country code.
   readonly whatsappNumber = '21624578212';
@@ -65,8 +66,49 @@ export class HomeComponent implements OnInit {
 
   timeSlots: string[] = [];
 
+  storeStatus: StoreStatus | null = null;
+  availability: ArticleAvailability[] = [];
+  loadingStore = true;
+  sendingOrder = false;
+  private liveSubscription?: Subscription;
+
   ngOnInit(): void {
     this.refreshTimeSlots();
+    this.refreshStoreData();
+    this.liveSubscription = timer(0, 15000).subscribe(() => this.refreshStoreData());
+  }
+
+  ngOnDestroy(): void {
+    this.liveSubscription?.unsubscribe();
+  }
+
+  refreshStoreData(): void {
+    this.orderService.getStoreStatus().subscribe({
+      next: status => { this.storeStatus = status; this.loadingStore = false; this.refreshTimeSlots(); },
+      error: () => { this.loadingStore = false; }
+    });
+    this.orderService.getAvailability().subscribe({ next: items => this.availability = items, error: () => {} });
+  }
+
+  get orderingEnabled(): boolean {
+    return this.storeStatus?.ordersEnabled !== false;
+  }
+
+  article(name: string): ArticleAvailability | undefined {
+    const exact = this.availability.find(a => a.name.trim().toLowerCase() === name.trim().toLowerCase());
+    if (exact) return exact;
+    return this.availability.find(a => a.name.trim().toLowerCase().includes(name.trim().toLowerCase()));
+  }
+
+  isAvailable(name: string): boolean {
+    const a = this.article(name);
+    return !a || a.available;
+  }
+
+  availabilityLabel(name: string): string {
+    const a = this.article(name);
+    if (!a || a.available) return '';
+    return a.stockStatus === 'low' ? 'LOW STOCK' : 'SOLD OUT';
   }
 
   refreshTimeSlots(): void {
@@ -84,11 +126,22 @@ export class HomeComponent implements OnInit {
 
   onPickupDateChange(): void {
     this.refreshTimeSlots();
+    this.orderService.getPickupSlots(this.pickupDate as 'today' | 'tomorrow').subscribe({
+      next: slots => {
+        const available = slots.filter(s => s.available).map(s => s.time);
+        if (available.length) { this.timeSlots = available; if (!this.timeSlots.includes(this.pickupTime)) this.pickupTime = this.timeSlots[0]; }
+      }, error: () => {}
+    });
+  }
+
+  private timeToMinutes(value: string): number {
+    const [h, m] = value.split(':').map(Number);
+    return h * 60 + m;
   }
 
   private buildTimeSlots(isToday: boolean): string[] {
     const slots: string[] = [];
-    let firstMinute = this.openingHour * 60;
+    let firstMinute = this.timeToMinutes(this.storeStatus?.openingTime || `${String(this.openingHour).padStart(2,'0')}:00`);
 
     if (isToday) {
       const now = new Date();
@@ -99,7 +152,7 @@ export class HomeComponent implements OnInit {
       );
     }
 
-    const lastMinute = this.closingHour * 60 + this.closingMinute;
+    const lastMinute = this.timeToMinutes(this.storeStatus?.closingTime || `${String(this.closingHour).padStart(2,'0')}:${String(this.closingMinute).padStart(2,'0')}`);
     for (let minute = firstMinute; minute <= lastMinute; minute += 15) {
       const hour = Math.floor(minute / 60);
       const mins = minute % 60;
@@ -130,13 +183,43 @@ export class HomeComponent implements OnInit {
 
   addToCart(): void {
     this.orderSent = false;
-    const basePrice = this.selectedBase === 'Sandwich' ? this.sandwichBase : this.pastaBase;
+    if (!this.orderingEnabled) return;
+
     const baseName = this.selectedBase === 'Sandwich' ? 'Sandwich' : `Pasta — ${this.selectedPasta}`;
-    const extras = [...this.selectedMeats, ...this.selectedCheeses];
-    if (this.addFries) extras.push('Fries');
-    const unitPrice = basePrice + extras.reduce((sum, name) => sum + (name === 'Fries' ? this.friesPrice : this.itemPrice(name)), 0);
+    const selectedExtras = [...this.selectedMeats, ...this.selectedCheeses];
+    if (this.addFries) selectedExtras.push('Fries');
+
+    const namesToCheck = [baseName, ...selectedExtras];
+    const unavailable = namesToCheck.find(name => !this.isAvailable(name));
+    if (unavailable) {
+      alert(`${unavailable} is currently unavailable.`);
+      this.refreshStoreData();
+      return;
+    }
+
+    const baseArticle = this.article(baseName) || this.article(this.selectedBase);
+    const extras = selectedExtras;
+    const unitPrice = (this.selectedBase === 'Sandwich' ? this.sandwichBase : this.pastaBase)
+      + extras.reduce((sum, name) => sum + (name === 'Fries' ? this.friesPrice : this.itemPrice(name)), 0);
+
+    const stockRequirements: { articleId: string; quantity: number }[] = [];
+    if (baseArticle?._id) stockRequirements.push({ articleId: baseArticle._id, quantity: 1 });
+    for (const name of extras) {
+      const a = this.article(name);
+      if (a?._id) stockRequirements.push({ articleId: a._id, quantity: 1 });
+    }
+
+    const department = baseArticle?.department || (this.selectedBase === 'Pasta' ? 'pasta' : 'sandwich');
+    const preparationMinutes = Math.max(
+      baseArticle?.preparationMinutes || 5,
+      ...extras.map(name => this.article(name)?.preparationMinutes || 0)
+    );
+
     const id = Date.now() + Math.random();
-    this.cart.push({ id, name: baseName, base: baseName, price: unitPrice, extras, quantity: this.quantity });
+    this.cart.push({
+      id, name: baseName, base: baseName, price: unitPrice, extras, quantity: this.quantity,
+      articleId: baseArticle?._id, department, preparationMinutes, stockRequirements
+    });
     this.quantity = 1;
     this.selectedMeats = [];
     this.selectedCheeses = [];
@@ -160,15 +243,15 @@ export class HomeComponent implements OnInit {
   backToCart(): void { this.showCheckout = false; this.showCart = true; }
 
 sendOrder(): void {
-  // if (
-  //   !this.customerName.trim() ||
-  //   !this.customerPhone.trim() ||
-  //   !this.pickupTime ||
-  //   !this.cart.length
-  // ) {
-  //   return;
-  // }
+ 
     console.log('SEND ORDER CLICKED');
+
+  if (!this.orderingEnabled) {
+    alert(this.storeStatus?.message || 'Orders are currently unavailable.');
+    return;
+  }
+
+  if (this.sendingOrder) return;
 
   console.log({
     customerName: this.customerName,
@@ -190,6 +273,7 @@ sendOrder(): void {
   console.log('VALIDATION PASSED');
 
   this.orderSent = false;
+  this.sendingOrder = true;
 
   const order = {
     customer: {
@@ -203,7 +287,11 @@ sendOrder(): void {
       quantity: item.quantity,
       unitPrice: Number(item.price.toFixed(2)),
       totalPrice: Number((item.price * item.quantity).toFixed(2)),
-      extras: item.extras
+      extras: item.extras,
+      articleId: item.articleId,
+      department: item.department,
+      preparationMinutes: item.preparationMinutes,
+      stockRequirements: item.stockRequirements.map(r => ({ ...r, quantity: r.quantity }))
     })),
 
     pickupDate: this.getPickupDate(),
@@ -252,6 +340,7 @@ sendOrder(): void {
       );
 
       this.orderSent = true;
+      this.sendingOrder = false;
     },
 
     error: (error) => {
@@ -261,6 +350,14 @@ sendOrder(): void {
       /*
        * 409 means the requested pickup time is full.
        */
+      this.sendingOrder = false;
+
+      if (error.status === 409 && (error.error?.code === 'ORDERS_CLOSED' || error.error?.code === 'ORDERS_CLOSING_SOON')) {
+        this.refreshStoreData();
+        alert(error.error?.message || this.storeStatus?.message || 'Ordering is currently closed.');
+        return;
+      }
+
       if (
         error.status === 409 &&
         error.error?.code === 'PICKUP_SLOT_UNAVAILABLE'
