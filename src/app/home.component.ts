@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { Subscription, timer } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { OrderService, ArticleAvailability, StoreStatus } from './services/order.service';
@@ -14,7 +15,7 @@ interface CartItem { id: number; name: string; base: string; price: number; extr
   templateUrl: './home.component.html'
 })
 export class HomeComponent implements OnInit, OnDestroy {
-  constructor(private orderService: OrderService){}
+  constructor(private orderService: OrderService, private router: Router){}
   // CHANGE THIS to Cheezy Mood's WhatsApp number, digits only, including Tunisia country code.
   readonly whatsappNumber = '21624578212';
 
@@ -311,89 +312,169 @@ sendOrder(): void {
 
       console.log('Order created successfully:', response);
 
-      const orderNumber =
-        response.orderNumber || 'CHEEZY-MOOD';
-
-      const invoiceNumber =
-        response.invoiceNumber || '';
-
-      const confirmedPickupTime =
-        response.pickupAt
-          ? new Date(response.pickupAt).toLocaleTimeString(
-              'en-TN',
-              {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-              }
-            )
-          : this.pickupTime;
-
-      const confirmedTotal =
-        response.total ?? this.cartTotal;
-
-      this.openWhatsApp(
-        orderNumber,
-        invoiceNumber,
-        confirmedPickupTime,
-        confirmedTotal
-      );
-
+      localStorage.setItem('cheezyMoodCustomerPhone', this.customerPhone.trim());
+      localStorage.setItem('cheezyMoodCustomerName', this.customerName.trim());
       this.orderSent = true;
       this.sendingOrder = false;
+      this.cart = [];
+      this.showCheckout = false;
+      this.showCart = false;
+      this.router.navigateByUrl('/profile');
     },
 
-    error: (error) => {
+   error: (error) => {
 
-      console.error('Order creation failed:', error);
+  console.error('ORDER CREATION FAILED');
+  console.error('HTTP STATUS:', error.status);
+  console.error('BACKEND ERROR:', error.error);
 
-      /*
-       * 409 means the requested pickup time is full.
-       */
-      this.sendingOrder = false;
+  this.sendingOrder = false;
 
-      if (error.status === 409 && (error.error?.code === 'ORDERS_CLOSED' || error.error?.code === 'ORDERS_CLOSING_SOON')) {
-        this.refreshStoreData();
-        alert(error.error?.message || this.storeStatus?.message || 'Ordering is currently closed.');
-        return;
-      }
+  const code = error.error?.code;
+  const message = error.error?.message;
 
-      if (
-        error.status === 409 &&
-        error.error?.code === 'PICKUP_SLOT_UNAVAILABLE'
-      ) {
+  // ============================================================
+  // STORE CLOSED / CLOSING SOON
+  // ============================================================
 
-        const suggested = error.error.suggestedSlot;
+  if (
+    code === 'ORDERS_CLOSED' ||
+    code === 'ORDERS_CLOSING_SOON'
+  ) {
 
-        if (suggested) {
+    console.log('Order rejected because store is closed/closing');
 
-          alert(
-            `This pickup time is full.\n\n` +
-            `Next available pickup: ${suggested.time}`
-          );
+    this.refreshStoreData();
 
-          this.pickupDate =
-            suggested.date === this.getPickupDate()
-              ? 'today'
-              : 'tomorrow';
+    alert(
+      message ||
+      this.storeStatus?.message ||
+      'Ordering is currently closed.'
+    );
 
-          this.pickupTime = suggested.time;
+    return;
+  }
 
-        } else {
+  // ============================================================
+  // PICKUP SLOT FULL
+  // ============================================================
 
-          alert(
-            'This pickup time is full and there are no more available slots.'
-          );
-        }
+  if (code === 'PICKUP_SLOT_UNAVAILABLE') {
 
-        return;
-      }
+    console.log('Pickup slot unavailable');
+
+    const suggested = error.error?.suggestedSlot;
+
+    if (suggested) {
 
       alert(
-        'Sorry, we could not send your preorder. ' +
-        'Please check your connection and try again.'
+        `This pickup time is full.\n\n` +
+        `Next available pickup: ${suggested.time}`
+      );
+
+      this.pickupDate =
+        suggested.date === this.getPickupDate()
+          ? 'today'
+          : 'tomorrow';
+
+      this.pickupTime = suggested.time;
+
+    } else {
+
+      alert(
+        'This pickup time is full and there are no more available slots.'
       );
     }
+
+    return;
+  }
+
+  // ============================================================
+  // ARTICLE / EXTRA / BASE UNAVAILABLE
+  // ============================================================
+
+  if (
+    code === 'ARTICLE_UNAVAILABLE' ||
+    code === 'EXTRA_UNAVAILABLE' ||
+    code === 'BASE_UNAVAILABLE' ||
+    code === 'OUT_OF_STOCK'
+  ) {
+
+    console.log('Order rejected because an item is unavailable');
+
+    alert(
+      message ||
+      'One or more items in your order are no longer available.'
+    );
+
+    // Refresh articles/stock from backend
+    this.refreshStoreData();
+
+    return;
+  }
+
+  // ============================================================
+  // CAPACITY / PREPARATION TIME
+  // ============================================================
+
+  if (
+    code === 'CAPACITY_EXCEEDED' ||
+    code === 'PREPARATION_TIME_UNAVAILABLE'
+  ) {
+
+    console.log('Order rejected because preparation capacity is full');
+
+    const suggested = error.error?.suggestedSlot;
+
+    if (suggested) {
+
+      alert(
+        message ||
+        `This time cannot accommodate your order.\n\n` +
+        `Suggested pickup: ${suggested.time}`
+      );
+
+      this.pickupTime = suggested.time;
+
+    } else {
+
+      alert(
+        message ||
+        'This order cannot be prepared at the selected time. Please choose another pickup time.'
+      );
+    }
+
+    return;
+  }
+
+  // ============================================================
+  // GENERIC CONFLICT
+  // ============================================================
+
+  if (error.status === 409) {
+
+    console.warn(
+      'Unhandled 409 business conflict:',
+      error.error
+    );
+
+    alert(
+      message ||
+      'This order cannot be placed with the current availability. Please check your pickup time and items.'
+    );
+
+    return;
+  }
+
+  // ============================================================
+  // OTHER ERRORS
+  // ============================================================
+
+  alert(
+    'Sorry, we could not send your preorder. ' +
+    'Please check your connection and try again.'
+  );
+}
 
   });
 }

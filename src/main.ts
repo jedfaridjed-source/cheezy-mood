@@ -5,6 +5,7 @@ import { provideHttpClient } from '@angular/common/http';
 
 const routes: Routes = [
   { path: '', loadComponent: () => import('./app/home.component').then(m => m.HomeComponent) },
+  { path: 'profile', loadComponent: () => import('./app/profile.component').then(m => m.ProfileComponent) },
   { path: '**', redirectTo: '' }
 ];
 

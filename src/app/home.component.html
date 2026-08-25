@@ -128,9 +128,12 @@
     <label>Pickup time<select [(ngModel)]="pickupTime" [disabled]="!timeSlots.length"><option *ngFor="let slot of timeSlots" [value]="slot">{{ slot }}</option></select><small class="field-hint" *ngIf="pickupDate === 'today'">Today starts from the next available slot.</small><small class="field-hint" *ngIf="!timeSlots.length">No pickup slots remain today — choose tomorrow.</small></label>
     <label>Note <span class="optional">optional</span><textarea [(ngModel)]="customerNote" rows="3" placeholder="Anything we should know?"></textarea></label>
     <div class="final-total"><span>ORDER TOTAL</span><b>{{ formatPrice(cartTotal) }}</b></div>
-    <button class="checkout" [disabled]="!orderingEnabled || sendingOrder || !customerName.trim() || !customerPhone.trim() || !pickupTime" (click)="sendOrder()">{{ sendingOrder ? 'SENDING…' : (orderingEnabled ? 'SEND PREORDER ON WHATSAPP →' : 'ORDERING CLOSED') }}</button>
+    <button class="checkout" [disabled]="!orderingEnabled || sendingOrder || !customerName.trim() || !customerPhone.trim() || !pickupTime" (click)="sendOrder()">{{ sendingOrder ? 'SENDING…' : (orderingEnabled ? 'SEND PREORDER →' : 'ORDERING CLOSED') }}</button>
     <button class="back" (click)="backToCart()">← Back to cart</button>
-    <p class="whatsapp-note">Your order will open in WhatsApp as a ready-to-send message. Make sure you send it to confirm your preorder.</p>
-    <div class="sent" *ngIf="orderSent">✓ WhatsApp opened. Send the message to finish your preorder.</div>
+    <div class="sent" *ngIf="orderSent">✓ Order received. Opening your profile…</div>
   </ng-template>
 </aside>
+
+<div class="order-loader" *ngIf="sendingOrder">
+  <div class="order-loader-card"><div class="spinner"></div><strong>SENDING YOUR ORDER…</strong><span>Checking availability and reserving your pickup time.</span></div>
+</div>

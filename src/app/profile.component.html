@@ -1,0 +1,82 @@
+<main class="profile-page">
+  <header class="profile-nav">
+    <button class="profile-logo" (click)="backHome()"><img src="assets/logo.png" alt="Cheezy Mood"></button>
+    <button class="profile-back" (click)="backHome()">← ORDER AGAIN</button>
+  </header>
+
+  <section class="profile-wrap" *ngIf="!loading; else loadingTpl">
+    <div class="profile-head">
+      <div>
+        <span class="eyebrow">YOUR CHEEZY MOOD</span>
+        <h1>MY PROFILE.</h1>
+      </div>
+      <div class="notification-badge" *ngIf="currentOrders.length">● {{ currentOrders.length }} ACTIVE ORDER{{ currentOrders.length === 1 ? '' : 'S' }}</div>
+    </div>
+
+    <p class="profile-error" *ngIf="error">{{ error }}</p>
+
+    <section class="profile-card" *ngIf="profile">
+      <div class="avatar-area">
+        <div class="avatar"><img *ngIf="profilePicture; else initials" [src]="profilePicture" alt="Profile picture"><ng-template #initials>{{ (profile.name || '?').charAt(0).toUpperCase() }}</ng-template></div>
+        <label class="upload">CHANGE PHOTO<input type="file" accept="image/*" (change)="choosePicture($event)"></label>
+      </div>
+      <div class="profile-fields">
+        <label>NAME<input [(ngModel)]="editName" maxlength="100"></label>
+        <label>PHONE<input [value]="profile.phone" disabled></label>
+        <button class="save" [disabled]="saving || !editName.trim()" (click)="saveProfile()">{{ saving ? 'SAVING…' : 'SAVE PROFILE' }}</button>
+      </div>
+    </section>
+
+    <section class="current" *ngIf="currentOrders.length; else noCurrent">
+      <div class="section-title"><span class="eyebrow">LIVE</span><h2>YOUR ORDER.</h2></div>
+      <article class="order-card active" *ngFor="let order of currentOrders">
+        <div class="order-top"><div><b>#{{ order.orderNumber }}</b><span>{{ statusLabel(order.status) }}</span></div><strong>{{ order.total | number:'1.2-2' }} DT</strong></div>
+        <div class="progress">
+          <div class="progress-line"><span [style.width.%]="(statusStep(order.status)-1) * 25"></span></div>
+          <div class="progress-step" [class.done]="statusStep(order.status)>=1"><b>1</b><small>SUBMITTED</small></div>
+          <div class="progress-step" [class.done]="statusStep(order.status)>=2"><b>2</b><small>CONFIRMED</small></div>
+          <div class="progress-step" [class.done]="statusStep(order.status)>=3"><b>3</b><small>PREPARING</small></div>
+          <div class="progress-step" [class.done]="statusStep(order.status)>=4"><b>4</b><small>READY</small></div>
+          <div class="progress-step" [class.done]="statusStep(order.status)>=5"><b>5</b><small>PICKED UP</small></div>
+        </div>
+        <div class="order-info"><span>PICKUP <b>{{ order.pickupAt | date:'medium' }}</b></span><span>CREATED <b>{{ formatDate(order.createdAt) }}</b></span></div>
+        <div class="order-items"><div *ngFor="let item of order.items"><span>{{ item.quantity }}× {{ item.name }} <small *ngIf="item.extras?.length">+ {{ item.extras.join(', ') }}</small></span><b>{{ item.totalPrice | number:'1.2-2' }} DT</b></div></div>
+        <div class="waiting" *ngIf="order.status === 'pending'">⏳ Your preorder is waiting for the cashier to confirm it.</div>
+        <div class="waiting confirmed" *ngIf="order.status === 'accepted'">✓ Cashier confirmed your order. The kitchen will prepare it for your pickup time.</div>
+        <div class="waiting preparing" *ngIf="order.status === 'preparing'">🔥 Your order is being prepared now.</div>
+        <div class="waiting ready" *ngIf="order.status === 'ready'">🚀 Your order is ready. Come pick it up!</div>
+        <button class="invoice" (click)="openInvoice(order)">VIEW INVOICE</button>
+      </article>
+    </section>
+    <ng-template #noCurrent><section class="empty-profile"><span class="eyebrow">NO ACTIVE ORDER</span><h2>READY FOR ANOTHER MOOD?</h2><button class="save" (click)="backHome()">ORDER NOW →</button></section></ng-template>
+
+    <section class="notifications" *ngIf="currentOrders.length">
+      <div class="section-title"><span class="eyebrow">UPDATES</span><h2>NOTIFICATIONS.</h2></div>
+      <div class="notification-row" *ngFor="let order of currentOrders">
+        <span class="notification-dot">●</span><div><b>#{{ order.orderNumber }} — {{ statusLabel(order.status) }}</b><small>{{ order.status === 'pending' ? 'Your order is waiting for cashier confirmation.' : order.status === 'accepted' ? 'The cashier confirmed your order.' : order.status === 'preparing' ? 'The kitchen is preparing your order.' : 'Your order is ready for pickup.' }}</small></div>
+      </div>
+    </section>
+
+    <section class="history" *ngIf="historyOrders.length">
+      <div class="section-title"><span class="eyebrow">PAST ORDERS</span><h2>ORDER HISTORY.</h2></div>
+      <article class="history-row" *ngFor="let order of historyOrders">
+        <div><b>#{{ order.orderNumber }}</b><small>{{ formatDate(order.createdAt) }}</small></div>
+        <span>{{ statusLabel(order.status) }}</span><strong>{{ order.total | number:'1.2-2' }} DT</strong><button (click)="openInvoice(order)">INVOICE</button>
+      </article>
+    </section>
+  </section>
+
+  <ng-template #loadingTpl><div class="profile-loading"><div class="spinner"></div><b>LOADING YOUR PROFILE…</b></div></ng-template>
+
+  <div class="invoice-overlay" *ngIf="selectedInvoice" (click)="closeInvoice()">
+    <article class="invoice-card" (click)="$event.stopPropagation()">
+      <button class="invoice-close" (click)="closeInvoice()">×</button>
+      <span class="eyebrow">CHEEZY MOOD</span><h2>INVOICE.</h2>
+      <div class="invoice-meta"><span>#{{ selectedInvoice.orderNumber }}</span><span>{{ selectedInvoice.invoiceNumber }}</span></div>
+      <div *ngFor="let item of selectedInvoice.items" class="invoice-line"><span>{{ item.quantity }}× {{ item.name }}<small *ngIf="item.extras?.length">{{ item.extras.join(' · ') }}</small></span><b>{{ item.totalPrice | number:'1.2-2' }} DT</b></div>
+      <div class="invoice-total"><span>TOTAL</span><b>{{ selectedInvoice.total | number:'1.2-2' }} DT</b></div>
+      <p>Status: <strong>{{ statusLabel(selectedInvoice.status) }}</strong></p>
+      <p>Pickup: {{ selectedInvoice.pickupAt | date:'medium' }}</p>
+    </article>
+  </div>
+</main>
